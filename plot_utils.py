@@ -210,7 +210,8 @@ def get_spec_models(spec_result, ind, transit_ind, nsamples=100):
     wl_params = wl_results['wl_params']
     wavs = wl_results['wavs']
     mask = wl_results['mask']
-    detrending_vectors = wl_results['detrending_vectors']
+    detrending_vectors = spec_result['detrending_vectors'][transit_ind]
+    len_det_wl = len(wl_results['detrending_vectors'][0].T)
     polyorder = wl_results['polyorder']
 
     if spec_result['chains'] is None:
@@ -234,7 +235,7 @@ def get_spec_models(spec_result, ind, transit_ind, nsamples=100):
         chain, axis=0
     )[:, :-3][:, transit_ind * (ncoeffs + 1):(ncoeffs + 1) * (transit_ind + 1)].T
     r, u1, u2 = np.concatenate(chain, axis=0)[:, -3:].T
-    err, coeffs, f, p = _unpack_params(spec_result['wl_params_eastman'][transit_ind], ncoeffs=ncoeffs, gp=gp)
+    err, coeffs, f, p = _unpack_params(spec_result['wl_params_eastman'][transit_ind], ncoeffs=1 + polyorder + len_det_wl, gp=gp)
     p_tiled = np.vstack([np.tile(pi, r.shape) for pi in p])
     p_tiled[3] = r
     p_tiled[:2] = [u1, u2]
@@ -244,7 +245,7 @@ def get_spec_models(spec_result, ind, transit_ind, nsamples=100):
         time[~mask], 
         flat_samples, 
         nsamples=100, 
-        detrending_vectors=detrending_vectors, 
+        detrending_vectors=np.array([dv[~mask] for dv in detrending_vectors.T]).T, 
         gp=gp, 
         polyorder=polyorder,
         flux=flux[~mask], 

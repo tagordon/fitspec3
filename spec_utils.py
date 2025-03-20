@@ -373,7 +373,6 @@ def run(
     wav_bin_edges,
     out_mask=None,
     detrending_vectors=None, 
-    detrending_cube=None,
     polyorder=1, 
     progress=True,
     nproc=1,
@@ -396,16 +395,10 @@ def run(
 
         mask = np.array(~out_mask[:, ind])
 
-        if detrending_cube is not None:
-            if detrending_vectors is not None:
-                new_detrending_vectors = np.hstack([detrending_vectors[mask], detrending_cube[ind][mask]])
-            else:
-                new_detrending_vectors = detrending_cube[ind][mask]
-        else: 
-            if detrending_vectors is not None:
-                new_detrending_vectors = detrending_vectors[mask]
-            else:
-                new_detrending_vectors = None
+        if detrending_vectors is not None:
+            new_detrending_vectors = detrending_vectors[mask]
+        else:
+            new_detrending_vectors = None
 
         params = get_initial_params(
             time[mask], 

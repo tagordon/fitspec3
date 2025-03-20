@@ -345,7 +345,6 @@ def fit_joint_spec(
     nproc=1, 
     out_filter_width=50,
     out_sigma=4,
-    n_components_spec=0,
     n_components=None,
     detrending_vectors=None,
     save_chains=True,
@@ -383,17 +382,17 @@ def fit_joint_spec(
     #wl_params = [res['wl_params_canon'] for res in wl_results]
     wavs = wl_results[0]['wavs']
 
-    if wl_results[0]['components'] is None:
-        n_components = 0
-    else:
-        n_components = len(wl_results[0]['components'].T)
+    #if wl_results[0]['components'] is None:
+    #    n_components = 0
+    #else:
+    #    n_components = len(wl_results[0]['components'].T)
 
     # find highest mode of white lightcurve chains 
     wl_params_eastman = []
     for result in wl_results:
 
         chains = result['chains']
-        ncoeffs = 1 + polyorder + n_components
+        ncoeffs = 1 + polyorder + len(wl_results[0]['components'].T)
 
         if gp:
             op, p = chains[:, :, :5 + ncoeffs], chains[:, :, 5 + ncoeffs:]
@@ -418,7 +417,7 @@ def fit_joint_spec(
     for result in wl_results:
 
         chains = result['chains']
-        ncoeffs = 1 + polyorder + n_components
+        ncoeffs = 1 + polyorder + len(wl_results[0]['components'].T)
 
         if gp:
             op, p = chains[:, :, :5 + ncoeffs], chains[:, :, 5 + ncoeffs:]
@@ -440,10 +439,10 @@ def fit_joint_spec(
             
         wl_params.append(wl_vals)
 
-    if n_components is not None:
-        n_components = len(wl_results[0]['detrending_vectors_unmasked'].T)
-    else:
-        n_components = 0
+    #if n_components is not None:
+    #    n_components = len(wl_results[0]['detrending_vectors_unmasked'].T)
+    #else:
+    #    n_components = 0
 
     times = [np.array(t, dtype=np.float64) for t in times]
 
@@ -499,33 +498,8 @@ def fit_joint_spec(
     filts = [gaussian_filter1d(bs, out_filter_width, axis=0) for bs in binned_specs]
     masks = [sigma_clip(bs - f, sigma=out_sigma).mask for bs, f in zip(binned_specs, filts)]
 
-    detrending_cubes = []
-    for i, (cube, bs) in enumerate(zip(cubes, binned_specs)):
-        if (cube is not None) & (n_components_spec > 0):
-
-            detrending_cubes.append(
-                np.zeros(
-                    (bs.shape[1], bs.shape[0], n_components_spec)
-                )
-            )
-        
-            for i in range(binned_spec.shape[1]):
-                detrending_cube[i, :, :] = decomp.get_cube(
-                    wavs, wav_bin_edges, cube, i, n_components=n_components_spec
-                )
-    
-            if n_components > 0:
-                components = decomposer(cube, n_components=n_components)
-                components = decomp.replace_outliers_all_components(components, 3, radius=5)
-                components = gaussian_filter1d(components, 5, axis=0)
-    
-                if detrending_vectors[i] is not None: 
-                    detrending_vectors[i] = np.hstack([detrending_vectors[i], components])
-                else:
-                    detrending_vectors[i] = components
-    
-        else:
-            detrending_cubes.append(None)
+    for i in range(ntrans):
+        detrending_vectors[i] = detrending_vectors[i][:, :n_components]
 
     post = spec_run_joint(
         times,
@@ -534,7 +508,6 @@ def fit_joint_spec(
         stellar_params,
         wav_bin_edges,
         out_masks=masks,
-        detrending_cubes=detrending_cubes,
         detrending_vectors=detrending_vectors,
         nproc=nproc,
         samples=samples,
@@ -572,7 +545,8 @@ def fit_joint_spec(
         'wavs': binned_wavs,
         'lightcurves': binned_specs,
         'chains': post,
-        'param_names': param_names
+        'param_names': param_names,
+        'detrending_vectors': detrending_vectors
     }
 
     return result_dir
