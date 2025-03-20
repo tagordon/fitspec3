@@ -9,6 +9,7 @@ from spec_joint import run as spec_run_joint
 import decomp
 from plot_utils import get_canonical_params
 from transit import canon_from_eastman
+from scipy.stats import gaussian_kde
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -355,6 +356,7 @@ def fit_joint_spec(
     end_wav=5.17692
 ):
 
+    ntrans = len(wl_results)
     if detrending_vectors is None:
         detrending_vectors = [res['detrending_vectors_unmasked'] for res in wl_results]
     
@@ -378,11 +380,68 @@ def fit_joint_spec(
     stellar_params = wl_results[0]['stellar_params']
     cubes = [res['cube'] for res in wl_results]
     detector = wl_results[0]['detector']
-    wl_params = [res['wl_params_canon'] for res in wl_results]
+    #wl_params = [res['wl_params_canon'] for res in wl_results]
     wavs = wl_results[0]['wavs']
 
+    if wl_results[0]['components'] is None:
+        n_components = 0
+    else:
+        n_components = len(wl_results[0]['components'].T)
+
+    # find highest mode of white lightcurve chains 
+    wl_params_eastman = []
+    for result in wl_results:
+
+        chains = result['chains']
+        ncoeffs = 1 + polyorder + n_components
+
+        if gp:
+            op, p = chains[:, :, :5 + ncoeffs], chains[:, :, 5 + ncoeffs:]
+        else:
+            op, p = chains[:, :, :3 + ncoeffs], chains[:, :, 3 + ncoeffs:]
+    
+        p = np.concatenate(p, axis=0).T
+        op = np.concatenate(op, axis=0).T
+        p = np.vstack([op, p])
+        isfin = np.all(np.isfinite(p), axis=0)
+        p = p[:, isfin]
+    
+        wl_vals = []
+        for s in p:
+            x = np.linspace(s.min(), s.max(), 100)
+            y = gaussian_kde(s.flatten()).evaluate(x)
+            wl_vals.append(x[np.argmax(y)])
+            
+        wl_params_eastman.append(wl_vals)
+        
+    wl_params = []
+    for result in wl_results:
+
+        chains = result['chains']
+        ncoeffs = 1 + polyorder + n_components
+
+        if gp:
+            op, p = chains[:, :, :5 + ncoeffs], chains[:, :, 5 + ncoeffs:]
+        else:
+            op, p = chains[:, :, :3 + ncoeffs], chains[:, :, 3 + ncoeffs:]
+    
+        p = np.array(np.vectorize(canon_from_eastman)(*p.T)).T
+        p = np.concatenate(p, axis=0).T
+        op = np.concatenate(op, axis=0).T
+        p = np.vstack([op, p])
+        isfin = np.all(np.isfinite(p), axis=0)
+        p = p[:, isfin]
+    
+        wl_vals = []
+        for s in p:
+            x = np.linspace(s.min(), s.max(), 100)
+            y = gaussian_kde(s.flatten()).evaluate(x)
+            wl_vals.append(x[np.argmax(y)])
+            
+        wl_params.append(wl_vals)
+
     if n_components is not None:
-        n_components = len(wl_results[0]['components_unmasked'].T)
+        n_components = len(wl_results[0]['detrending_vectors_unmasked'].T)
     else:
         n_components = 0
 
@@ -484,12 +543,46 @@ def fit_joint_spec(
         gp=gp
     )
 
-    if save_chains:
-        for i in range(len(post)):
-            np.save(out_dir + 'spec_mcmc_chains_{0}'.format(i), post[i].get_chain()[burnin:, :, :])
-            np.save(out_dir + 'wavs_{0}'.format(i), binned_wavs)
+    param_names = []
+    if gp:
+        for i in range(ntrans):
+            noise_params = ['[{0}] error'.format(i), '[{0}] log(sigma) (GP)'.format(i), '[{0}] log(w0) (GP)'.format(i)]
+            poly_params = ['[{0}] p{1}'.format(i, j) for j in range(polyorder + 1)]
+            coeff_params = ['[{0}] c{1}'.format(i, j) for j in range(len(detrending_vectors[0].T))]
+            other_params = np.concatenate([noise_params, poly_params, coeff_params])
+            param_names.append(
+                other_params
+            )
     else:
-        return post, binned_wavs
+        for i in range(ntrans):
+            noise_params = ['[{0}] error'.format(i)]
+            poly_params = ['[{0}] p{1}'.format(i, j) for j in range(polyorder + 1)]
+            coeff_params = ['[{0}] c{1}'.format(i, j) for j in range(len(detrending_vectors[0].T))]
+            other_params = np.concatenate([noise_params, poly_params, coeff_params])
+            param_names.append(
+                other_params
+            )
+    param_names.append(['r', 'u1', 'u2'])
+    param_names = np.concatenate(param_names)
+
+    result_dir = {
+        'wl_results': wl_results,
+        'wl_params': wl_params,
+        'wl_params_eastman': wl_params_eastman,
+        'wavs': binned_wavs,
+        'lightcurves': binned_specs,
+        'chains': post,
+        'param_names': param_names
+    }
+
+    return result_dir
+
+    #if save_chains:
+    #    for i in range(len(post)):
+    #        np.save(out_dir + 'spec_mcmc_chains_{0}'.format(i), post[i].get_chain()[burnin:, :, :])
+    #        np.save(out_dir + 'wavs_{0}'.format(i), binned_wavs)
+    #else:
+    #    return post, binned_wavs
 
 #def fit_spec(
 #    wl_results,

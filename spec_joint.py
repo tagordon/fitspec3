@@ -63,6 +63,9 @@ def get_joint_initial_params(
         if i == 0:
             transit_params = initial_params[:3]
 
+    # transit_params are r, u1, u2
+    # other_params are [err_guess, (opt: lsigma_guess), (opt: lw0)], [p0, p1, ... pn, c0, c1, ... cn]
+    # and then other_params is tiled for each individual transit. 
     return np.concatenate([np.concatenate(other_params), transit_params])
     
 def get_joint_log_prob(lps, n_components, polyorder, gp=False, same_rad=False):

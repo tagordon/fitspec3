@@ -159,7 +159,7 @@ priors_dict = {
         't0': uniform_prior(0.0, 100, init=0.085),
         'semimajor_axis': uniform_prior(4.0, 10.0, init=7.61), # not from ref. 
         'inclination': normal_prior(84.27 * np.pi / 180, 1.01 * np.pi / 180, init=85.8 * np.pi / 180),
-        'eccentricity': uniform_prior(0, 1e-4, init=0.5e-3),
+        'eccentricity': trunc_normal_prior(0.0, 1e-6, 0, 1),
         'periastron': uniform_prior(-np.pi, np.pi),
         'reference': (
             'https://ui.adsabs.harvard.edu/abs/2024A%26A...688A.216H/abstract',

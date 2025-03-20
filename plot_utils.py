@@ -54,6 +54,22 @@ def plot_fit(
 
     return axs
 
+def plot_fit_spec(
+    result,
+    data_color=plt.cm.terrain(0.1), 
+    transit_color=plt.cm.terrain(0.7),
+    systematics_color=plt.cm.terrain(0.3),
+    gp_color=plt.cm.terrain(0.9),
+    combined_color=plt.cm.terrain(0.1),
+    axs=None
+):
+
+    if axs is None:
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+        
+    time = result['time']
+
+    
 def plot_corner(
     result, 
     color=None, 
@@ -107,7 +123,6 @@ def plot_corner(
             
     return fig
 
-
 def get_canonical_params(result, polyorder):
 
     detrending_vectors = result['detrending_vectors']
@@ -158,6 +173,91 @@ def _get_model_from_sample(time, p, detrending_vectors=None, polyorder=1, gp=Fal
         mu, jac = reparam(time, p)
         
     return mu * f, trend
+
+def get_spec_models(spec_result, ind, transit_ind, nsamples=100):
+    '''
+    Get posterior samples for the the transit model, 
+    systematics model, and GP model (if applicable) for 
+    the results of a spectral lightcurve fit.
+
+    Args:
+        spec_results (dict): results dictionary returned from fit_spec_joint
+        nsamples (int, default=100): number of posterior samples 
+        to return. 
+        ind (int): the index of the spectral lightcurve to model 
+
+    Returns: 
+        transit models (2D array): the transit model
+        systematics models (2D array): polynomial + linear combination 
+        detrending vectors and PCA vectors as specified in fit_wlc
+        GP prediction (2D array): only returned if gp=True in fit_wlc
+        f0 (1D array): the constant term of the polynomial in the systematics 
+        model, which is useful for plotting the systematics model and GP 
+        prediction.
+
+    Note: the systematics model and GP prediction vectors will have zero flux 
+    offset, so f0 should be added to these if they are to be plotted over the 
+    observations. 
+    '''
+
+    wl_results = spec_result['wl_results'][transit_ind]
+    time = wl_results['time']
+    spec = wl_results['spec']
+    stellar_params = wl_results['stellar_params']
+    cube = wl_results['cube']
+    detector = wl_results['detector']
+    gp = wl_results['gp']
+    wl_params = wl_results['wl_params']
+    wavs = wl_results['wavs']
+    mask = wl_results['mask']
+    detrending_vectors = wl_results['detrending_vectors']
+    polyorder = wl_results['polyorder']
+
+    if spec_result['chains'] is None:
+        raise AttributeError(
+            '''
+            Result dictionary does not contain MCMC chains. 
+            Run fit_wlc with return_chains=True.
+            '''
+        )
+
+    if detrending_vectors is None:
+        len_det = 0
+    else:
+        len_det = len(detrending_vectors.T)
+
+    ncoeffs = 1 + polyorder + len_det
+
+    flux = spec_result['lightcurves'][transit_ind][:, ind]
+    chain = spec_result['chains'][ind].get_chain()
+    other_params = np.concatenate(
+        chain, axis=0
+    )[:, :-3][:, transit_ind * (ncoeffs + 1):(ncoeffs + 1) * (transit_ind + 1)].T
+    r, u1, u2 = np.concatenate(chain, axis=0)[:, -3:].T
+    err, coeffs, f, p = _unpack_params(spec_result['wl_params_eastman'][transit_ind], ncoeffs=ncoeffs, gp=gp)
+    p_tiled = np.vstack([np.tile(pi, r.shape) for pi in p])
+    p_tiled[3] = r
+    p_tiled[:2] = [u1, u2]
+    flat_samples = np.concatenate([other_params, p_tiled], axis=0).T
+
+    ret = _get_models(
+        time[~mask], 
+        flat_samples, 
+        nsamples=100, 
+        detrending_vectors=detrending_vectors, 
+        gp=gp, 
+        polyorder=polyorder,
+        flux=flux[~mask], 
+        return_idx=True
+    )
+
+    idx = ret[-1]
+    if gp:
+        f = flat_samples[idx, 3]
+    else:
+        f = flat_samples[idx, 1]
+
+    return *ret[:-1], f
 
 def get_wl_models(wl_results, nsamples=100):
     '''
