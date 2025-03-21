@@ -358,7 +358,8 @@ def fit_joint_spec(
     ntrans = len(wl_results)
     if detrending_vectors is None:
         detrending_vectors = [res['detrending_vectors_unmasked'] for res in wl_results]
-    
+
+    wl_polyorder = wl_results[0]['polyorder']
     if polyorder is None:
         polyorder = wl_results[0]['polyorder']
 
@@ -392,7 +393,7 @@ def fit_joint_spec(
     for result in wl_results:
 
         chains = result['chains']
-        ncoeffs = 1 + polyorder + len(wl_results[0]['components'].T)
+        ncoeffs = 1 + wl_polyorder + len(wl_results[0]['components'].T)
 
         if gp:
             op, p = chains[:, :, :5 + ncoeffs], chains[:, :, 5 + ncoeffs:]
@@ -417,7 +418,7 @@ def fit_joint_spec(
     for result in wl_results:
 
         chains = result['chains']
-        ncoeffs = 1 + polyorder + len(wl_results[0]['components'].T)
+        ncoeffs = 1 + wl_polyorder + len(wl_results[0]['components'].T)
 
         if gp:
             op, p = chains[:, :, :5 + ncoeffs], chains[:, :, 5 + ncoeffs:]
@@ -460,21 +461,25 @@ def fit_joint_spec(
         binned_wavs = wavs
         binned_specs = specs
     elif wav_per_bin is None:
-        wavs_unbinned = result_nrs1[0]['wavs']
         binned_wavs = np.array(
-            [np.mean(
-                wavs_unbinned[pix_per_bin * i: pix_per_bin * (i + 1)]
-            ) for i in range(len(wavs_unbinned) // pix_per_bin)]
+            [np.sum(
+                wavs[pix_per_bin * i: pix_per_bin * (i + 1)]
+            ) for i in range(np.int64(len(wavs) // pix_per_bin))]
         )
         wav_bin_edges = np.array(
-            [wavs_unbinned[30 * i] for i in range(len(wavs_unbinned) // 30 + 1)]
+            [wavs[30 * i] for i in range(np.int64(len(wavs) // 30 + 1))]
         )
-        spec_unbinned = result_nrs1[0]['spec']
-        binned_spec = np.array(
-            [np.mean(
-                spec_unbinned[:, pix_per_bin * i: pix_per_bin * (i + 1)], axis=1
-            ) for i in range(len(wavs_unbinned) // pix_per_bin)]
-        ).T
+        spec_unbinned = wl_results[0]['spec']
+
+        binned_specs = []
+        for spec in specs:
+            binned_specs.append(
+                np.array(
+                    [np.sum(
+                        spec_unbinned[:, pix_per_bin * i: pix_per_bin * (i + 1)], axis=1
+                    ) for i in range(len(wavs) // pix_per_bin)]
+                ).T
+            )
     else:
         nbands = np.int64((wavs[-1] - wavs[0]) // wav_per_bin)
         wav_bin_edges = np.linspace(wavs[0], wavs[-1], nbands + 1)

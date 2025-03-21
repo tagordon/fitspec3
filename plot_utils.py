@@ -241,11 +241,16 @@ def get_spec_models(spec_result, ind, transit_ind, nsamples=100):
     p_tiled[:2] = [u1, u2]
     flat_samples = np.concatenate([other_params, p_tiled], axis=0).T
 
+    if detrending_vectors.shape[1] > 0:
+        detrending_vectors = np.array([dv[~mask] for dv in detrending_vectors.T]).T
+    else:
+        detrending_vectors = None
+
     ret = _get_models(
         time[~mask], 
         flat_samples, 
         nsamples=100, 
-        detrending_vectors=np.array([dv[~mask] for dv in detrending_vectors.T]).T, 
+        detrending_vectors=detrending_vectors, 
         gp=gp, 
         polyorder=polyorder,
         flux=flux[~mask], 
